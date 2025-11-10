@@ -69,6 +69,15 @@ Detailed host system monitoring with sub-tabs:
 - Visual badge counter
 - Dropdown alert list with details
 
+### 🕒 **Real-time Features**
+- **Auto-refresh intervals**:
+  - Container list: 5 seconds
+  - Container logs: 3 seconds (when Live mode active)
+  - Host metrics: 30 seconds
+- **Live/Pause toggle** for log streaming control
+- **Timezone support**: UTC to WIB (Asia/Jakarta) conversion
+- **Accurate uptime tracking**: Uses container StartedAt (resets on restart)
+
 ### 🎨 **Modern UI/UX**
 - **Dark Theme** with animated gradient background
 - **Glass Morphism** effect on navbar and topbar
