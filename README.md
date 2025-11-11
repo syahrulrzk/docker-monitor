@@ -115,23 +115,65 @@ Detailed host system monitoring with sub-tabs:
 
 Before installation, ensure you have:
 
-- **Python 3.8+** (for backend)
-- **Node.js 16+** (for frontend)
+- **Python 3.13+** (for backend)
+- **Node.js 18+** (for frontend)
 - **Docker** (for container monitoring)
+- **Docker Compose** (for containerized deployment)
 - **Git** (for cloning repository)
 
 ## 🚀 Installation
 
-### 1. Clone Repository
+### Option 1: Docker Deployment (Recommended) 🐳
+
+The easiest and fastest way to run the application:
+
+#### 1. Clone Repository
 
 ```bash
 git clone https://github.com/yourusername/docker-monitor.git
 cd docker-monitor
 ```
 
-### 2. Backend Setup
+#### 2. Build and Run with Docker Compose
 
-#### Create Virtual Environment (Required on Kali Linux)
+```bash
+# Build the Docker image
+docker-compose build
+
+# Start the application
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker logs docker-monitor
+```
+
+#### 3. Access the Application
+
+- **Backend API**: `http://localhost:8000`
+- **Frontend UI**: `http://localhost:3000`
+- **Health Check**: `http://localhost:8000/health`
+
+#### Stop the Application
+
+```bash
+docker-compose down
+```
+
+### Option 2: Local Development Setup
+
+#### 1. Clone Repository
+
+```bash
+git clone https://github.com/yourusername/docker-monitor.git
+cd docker-monitor
+```
+
+#### 2. Backend Setup
+
+##### Create Virtual Environment (Required on Kali Linux)
 
 ```bash
 cd backend
@@ -139,35 +181,28 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-#### Install Dependencies
+##### Install Dependencies
 
 ```bash
-pip install fastapi uvicorn[standard] sqlalchemy python-dotenv psutil docker pydantic pydantic-settings
+pip install -r requirements.txt
 ```
 
-#### Configure Environment (Optional)
+##### Run Backend Server
 
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-#### Run Backend Server
-
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python main.py
 ```
 
 Backend will run on: `http://localhost:8000`
 
-### 3. Frontend Setup
+#### 3. Frontend Setup
 
 ```bash
 cd ../frontend
 npm install
 ```
 
-#### Run Frontend Development Server
+##### Run Frontend Development Server
 
 ```bash
 npm run dev
@@ -177,9 +212,20 @@ Frontend will run on: `http://localhost:5173`
 
 ## 🎯 Usage
 
-1. **Start Backend**: Navigate to `backend/` and run `uvicorn main:app --reload`
+### Docker Deployment (Production)
+
+1. **Start Application**: `docker-compose up -d`
+2. **Open Browser**: Go to `http://localhost:3000`
+3. **Stop Application**: `docker-compose down`
+
+### Local Development
+
+1. **Start Backend**: Navigate to `backend/` and run `python main.py`
 2. **Start Frontend**: Navigate to `frontend/` and run `npm run dev`
 3. **Open Browser**: Go to `http://localhost:5173`
+
+### Application Features
+
 4. **Navigate Tabs**:
    - **Overview**: Dashboard with real-time metrics
    - **System**: Deep host monitoring
@@ -233,22 +279,42 @@ docker-monitor/
 │   └── requirements.txt     # Python dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx          # Main application
+│   │   ├── main.jsx         # Entry point
 │   │   ├── components/      # React components
 │   │   │   ├── Sidebar.jsx
 │   │   │   ├── TopBar.jsx
-│   │   │   └── ContainerMetricsChart.jsx
+│   │   │   ├── ContainersList.jsx
+│   │   │   ├── ContainerMetricsChart.jsx
+│   │   │   ├── HostMetricsChart.jsx
+│   │   │   └── MetricsCards.jsx
 │   │   ├── hooks/           # Custom hooks
 │   │   │   └── useMetrics.js
 │   │   └── index.css        # Global styles
 │   ├── package.json
 │   └── vite.config.js
+├── Dockerfile               # Multi-stage Docker build
+├── docker-compose.yml       # Docker Compose configuration
+├── supervisord.conf         # Supervisor process manager config
+├── serve_frontend.py        # Frontend static file server
 └── README.md
 ```
 
 ## 🔧 Configuration
 
-### Backend Configuration
+### Docker Configuration
+
+Edit `docker-compose.yml` environment variables:
+
+```yaml
+environment:
+  - BACKEND_HOST=0.0.0.0
+  - BACKEND_PORT=8000
+  - DATABASE_URL=sqlite:///./data/docker_metrics.db
+  - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+  - DOCKER_HOST=unix:///var/run/docker.sock
+```
+
+### Backend Configuration (Local Development)
 
 Edit `backend/.env`:
 
@@ -256,9 +322,11 @@ Edit `backend/.env`:
 DATABASE_URL=sqlite:///./metrics.db
 METRICS_INTERVAL=30  # Seconds between metric collection
 DATA_RETENTION_DAYS=30
+BACKEND_HOST=0.0.0.0
+BACKEND_PORT=8000
 ```
 
-### Frontend Configuration
+### Frontend Configuration (Local Development)
 
 Edit `frontend/vite.config.js` for proxy settings:
 
@@ -270,21 +338,45 @@ server: {
 }
 ```
 
+### Supervisor Configuration
+
+The Docker deployment uses Supervisor to manage both backend and frontend processes:
+
+- Backend: FastAPI server on port 8000
+- Frontend: Python HTTP server serving built files on port 3000
+- Logs: Available at `/var/log/supervisor/`
+
 ## 🐛 Troubleshooting
 
-### Backend Issues
+### Docker Deployment Issues
+
+**Container keeps restarting**
+- Check logs: `docker logs docker-monitor`
+- Verify Docker socket is accessible: `ls -la /var/run/docker.sock`
+- Ensure ports 8000 and 3000 are not in use
+
+**Build fails with Python compatibility errors**
+- The Dockerfile uses Python 3.13 and compatible dependencies
+- If issues persist, rebuild: `docker-compose build --no-cache`
+
+**Healthcheck failing**
+- Wait 40 seconds for startup (healthcheck start period)
+- Check if backend is responding: `curl http://localhost:8000/health`
+
+### Backend Issues (Local Development)
 
 **Error: externally-managed-environment**
-- Solution: Use virtual environment (see Installation step 2)
+- Solution: Use virtual environment (see Installation Option 2)
 
 **Error: Docker connection refused**
 - Solution: Ensure Docker daemon is running
 - Check: `docker ps`
 
 **Error: Pydantic compatibility**
-- Solution: `pip install --upgrade pydantic pydantic-core`
+- Solution: Use Python 3.13 and install from requirements.txt
+- `pip install -r requirements.txt`
 
-### Frontend Issues
+### Frontend Issues (Local Development)
 
 **Error: Cannot connect to backend**
 - Check backend is running on port 8000
@@ -292,6 +384,16 @@ server: {
 
 **Error: Module not found**
 - Solution: `npm install`
+
+### Performance Issues
+
+**High CPU usage**
+- Adjust metrics collection interval in backend config
+- Default is 30 seconds, increase if needed
+
+**Slow UI response**
+- Check if Docker daemon is responsive
+- Reduce auto-refresh intervals in frontend components
 
 ## 🤝 Contributing
 

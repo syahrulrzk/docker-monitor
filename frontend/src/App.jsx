@@ -28,7 +28,10 @@ function App() {
   const [allContainers, setAllContainers] = useState([]); // Real container data from Docker API
   const [logsLoading, setLogsLoading] = useState(false); // Loading state for logs
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(true); // Toggle auto-refresh
+  const [realTimeLogs, setRealTimeLogs] = useState(false); // Toggle real-time WebSocket streaming
   const logsEndRef = useRef(null); // Ref for auto-scroll to top
+  const wsRef = useRef(null); // WebSocket reference
+  const lastLogTimestampRef = useRef(null); // Track last log timestamp for polling
 
   useEffect(() => {
     if (hostMetrics.length > 0) {
@@ -141,16 +144,54 @@ function App() {
     }
   }, [showLogs, selectedContainer, selectedLogDate]);
 
-  // Auto-refresh logs every 3 seconds (like docker logs -f)
+  // Real-time logs polling
   useEffect(() => {
-    if (showLogs && selectedContainer && autoRefreshLogs) {
+    if (showLogs && selectedContainer && realTimeLogs) {
+      const containerName = selectedContainer.name || selectedContainer.container_name;
+
+      const pollLogs = async () => {
+        try {
+          const response = await fetch(`http://localhost:8000/api/containers/${containerName}/logs/live?since=${encodeURIComponent(lastLogTimestampRef.current || '')}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.logs && data.logs.length > 0) {
+              // Add new logs to the beginning (newest first)
+              setContainerLogs(prevLogs => [...data.logs, ...prevLogs]);
+
+              // Update the last timestamp for next poll
+              if (data.latest_timestamp) {
+                lastLogTimestampRef.current = data.latest_timestamp;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error polling logs:', error);
+        }
+      };
+
+      // Initial poll to get recent logs
+      pollLogs();
+
+      // Set up polling interval
+      const interval = setInterval(pollLogs, 2000); // Poll every 2 seconds
+
+      return () => clearInterval(interval);
+    } else {
+      // Reset timestamp when real-time is disabled
+      lastLogTimestampRef.current = null;
+    }
+  }, [showLogs, selectedContainer, realTimeLogs]);
+
+  // Auto-refresh logs every 3 seconds (like docker logs -f) - only when not using real-time
+  useEffect(() => {
+    if (showLogs && selectedContainer && autoRefreshLogs && !realTimeLogs) {
       const containerName = selectedContainer.name || selectedContainer.container_name;
       const interval = setInterval(() => {
         fetchContainerLogs(containerName, null, selectedLogDate);
       }, 3000); // 3 seconds for real-time streaming feel
       return () => clearInterval(interval);
     }
-  }, [showLogs, selectedContainer, selectedLogDate, autoRefreshLogs]);
+  }, [showLogs, selectedContainer, selectedLogDate, autoRefreshLogs, realTimeLogs]);
 
   // Auto-scroll to TOP when new logs arrive (newest first)
   useEffect(() => {
@@ -1407,28 +1448,53 @@ function App() {
                               </button>
                             </div>
                             
-                            {/* Auto-refresh Toggle (removed manual refresh button) */}
+                            {/* Real-time Logs Toggle */}
                             <button
-                              onClick={() => setAutoRefreshLogs(!autoRefreshLogs)}
+                              onClick={() => setRealTimeLogs(!realTimeLogs)}
                               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${
-                                autoRefreshLogs 
-                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                                realTimeLogs
+                                  ? 'bg-purple-600 hover:bg-purple-700 text-white'
                                   : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
                               }`}
-                              title={autoRefreshLogs ? 'Pause auto-refresh' : 'Resume auto-refresh'}
+                              title={realTimeLogs ? 'Disable real-time streaming' : 'Enable real-time streaming'}
                             >
-                              {autoRefreshLogs ? (
+                              {realTimeLogs ? (
                                 <>
                                   <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                                  Live (3s)
+                                  ⚡ Real-time
                                 </>
                               ) : (
                                 <>
                                   <div className="w-2 h-2 bg-slate-500 rounded-full" />
-                                  Paused
+                                  📄 Static
                                 </>
                               )}
                             </button>
+
+                            {/* Auto-refresh Toggle (only show when not in real-time mode) */}
+                            {!realTimeLogs && (
+                              <button
+                                onClick={() => setAutoRefreshLogs(!autoRefreshLogs)}
+                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${
+                                  autoRefreshLogs
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                                }`}
+                                title={autoRefreshLogs ? 'Pause auto-refresh' : 'Resume auto-refresh'}
+                              >
+                                {autoRefreshLogs ? (
+                                  <>
+                                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                                    Live (3s)
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="w-2 h-2 bg-slate-500 rounded-full" />
+                                    Paused
+                                  </>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
 

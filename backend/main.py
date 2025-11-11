@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -9,8 +9,16 @@ from database import get_db, HostMetric, ContainerMetric, init_db
 from collector import start_collector
 from config import settings
 import logging
+import asyncio
+import docker
+import json
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging with proper formatting
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
 # Pydantic models for API responses
@@ -77,6 +85,14 @@ async def root():
         "version": "1.0.0"
     }
 
+@app.get("/health")
+async def health():
+    """Health check endpoint for Docker healthcheck"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
 @app.get("/api/metrics", response_model=MetricsResponse)
 async def get_metrics(db: Session = Depends(get_db)):
     """
@@ -99,8 +115,8 @@ async def get_metrics(db: Session = Depends(get_db)):
         logger.info(f"Retrieved {len(host_metrics)} host metrics and {len(container_metrics)} container metrics")
         
         return MetricsResponse(
-            host_metrics=host_metrics,
-            container_metrics=container_metrics
+            host_metrics=[HostMetricResponse.from_orm(h) for h in host_metrics],
+            container_metrics=[ContainerMetricResponse.from_orm(c) for c in container_metrics]
         )
     except Exception as e:
         logger.error(f"Error retrieving metrics: {e}")
@@ -540,6 +556,77 @@ async def read_log_file(
             'logs': [],
             'total': 0
         }
+
+@app.get("/api/containers/{container_name}/logs/live")
+async def get_live_container_logs(container_name: str, since: str = None):
+    """Get live container logs since a specific timestamp"""
+    try:
+        docker_client = docker.from_env()
+        container = docker_client.containers.get(container_name)
+
+        # Parse since timestamp
+        since_timestamp = None
+        if since:
+            try:
+                since_timestamp = int(datetime.fromisoformat(since.replace('Z', '+00:00')).timestamp())
+            except:
+                since_timestamp = int((datetime.utcnow() - timedelta(seconds=30)).timestamp())
+
+        # Get logs since the specified time
+        if since_timestamp:
+            new_logs = container.logs(since=since_timestamp, timestamps=True).decode('utf-8', errors='ignore')
+        else:
+            # First call - get recent logs
+            new_logs = container.logs(tail=50, timestamps=True).decode('utf-8', errors='ignore')
+
+        logs = []
+        for line in new_logs.split('\n'):
+            if line.strip():
+                # Parse timestamp and message
+                parts = line.split(' ', 1)
+                if len(parts) == 2:
+                    timestamp_str, message = parts
+                else:
+                    timestamp_str = datetime.utcnow().isoformat()
+                    message = line
+
+                import re
+                level = 'INFO'
+                details = {}
+
+                if re.search(r'\b(error|500|502|503|504|failed|exception|fatal)\b', message, re.IGNORECASE):
+                    level = 'ERROR'
+                    if '500' in message or 'error' in message.lower():
+                        details['severity'] = 'high'
+                        if 'http' in message.lower():
+                            details['type'] = 'HTTP Error'
+                elif re.search(r'\b(warn|warning|deprecated)\b', message, re.IGNORECASE):
+                    level = 'WARNING'
+                    details['severity'] = 'medium'
+                elif re.search(r'\b(success|started|connected|ready)\b', message, re.IGNORECASE):
+                    level = 'INFO'
+                    details['severity'] = 'low'
+
+                logs.append({
+                    'timestamp': timestamp_str,
+                    'level': level,
+                    'message': message.strip(),
+                    'details': details if details else None
+                })
+
+        return {
+            'container_name': container_name,
+            'logs': logs,
+            'total': len(logs),
+            'latest_timestamp': logs[-1]['timestamp'] if logs else None
+        }
+
+    except docker.errors.NotFound:
+        logger.error(f"Container {container_name} not found")
+        return {"error": "Container not found", "logs": []}
+    except Exception as e:
+        logger.error(f"Error getting live logs for container {container_name}: {e}")
+        return {"error": str(e), "logs": []}
 
 if __name__ == "__main__":
     import uvicorn
