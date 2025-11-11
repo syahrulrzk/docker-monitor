@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const API_URL = 'http://localhost:8000';
+import API_BASE_URL from '../config/api';
 
 export const useMetrics = () => {
   const [hostMetrics, setHostMetrics] = useState([]);
@@ -10,7 +9,7 @@ export const useMetrics = () => {
 
   const fetchMetrics = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/metrics`);
+      const response = await fetch(`${API_BASE_URL}/api/metrics`);
       if (!response.ok) throw new Error('Failed to fetch metrics');
       
       const data = await response.json();

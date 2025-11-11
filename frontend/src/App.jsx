@@ -8,6 +8,7 @@ import ContainersList from './components/ContainersList';
 import MetricsCards from './components/MetricsCards';
 import TopTables from './components/TopTables';
 import { useMetrics } from './hooks/useMetrics';
+import API_BASE_URL from './config/api';
 import { AlertCircle, Loader2, Shield, AlertTriangle, CheckCircle, Cpu, MemoryStick, FileText, HardDrive, ChevronRight, X, TrendingUp, Box } from 'lucide-react';
 
 function App() {
@@ -48,7 +49,7 @@ function App() {
   useEffect(() => {
     const fetchContainerStats = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/containers/stats');
+        const response = await fetch(`${API_BASE_URL}/api/containers/stats`);
         if (response.ok) {
           const data = await response.json();
           setContainerStats(data);
@@ -67,7 +68,7 @@ function App() {
   useEffect(() => {
     const fetchAllContainers = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/containers/all');
+        const response = await fetch(`${API_BASE_URL}/api/containers/all`);
         if (response.ok) {
           const data = await response.json();
           setAllContainers(data.containers || []);
@@ -97,7 +98,7 @@ function App() {
       setLogsLoading(true);
       
       const targetDate = date || selectedLogDate;
-      const response = await fetch(`http://localhost:8000/api/containers/${containerName}/logs?tail=500&date=${targetDate}`);
+      const response = await fetch(`${API_BASE_URL}/api/containers/${containerName}/logs?tail=500&date=${targetDate}`);
       if (!response.ok) throw new Error('Failed to fetch logs');
       const data = await response.json();
       setContainerLogs(data.logs || []);
@@ -151,7 +152,7 @@ function App() {
 
       const pollLogs = async () => {
         try {
-          const response = await fetch(`http://localhost:8000/api/containers/${containerName}/logs/live?since=${encodeURIComponent(lastLogTimestampRef.current || '')}`);
+          const response = await fetch(`${API_BASE_URL}/api/containers/${containerName}/logs/live?since=${encodeURIComponent(lastLogTimestampRef.current || '')}`);
           if (response.ok) {
             const data = await response.json();
             if (data.logs && data.logs.length > 0) {
@@ -229,7 +230,7 @@ function App() {
                   <h3 className="text-lg font-semibold text-red-300">Error Loading Metrics</h3>
                   <p className="text-sm text-red-400 mt-1">{error}</p>
                   <p className="text-xs text-slate-400 mt-2">
-                    Make sure the backend is running on http://localhost:8000
+                    Make sure the backend is running on port 8000
                   </p>
                 </div>
               </div>

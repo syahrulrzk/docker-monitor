@@ -1,5 +1,6 @@
 import { Container, Play, Square, RotateCw, Trash2, FileText, Clock, Image as ImageIcon } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
+import API_BASE_URL from '../config/api';
 
 const ContainersList = ({ containerMetrics }) => {
   const [selectedContainer, setSelectedContainer] = useState(null);
@@ -8,7 +9,7 @@ const ContainersList = ({ containerMetrics }) => {
 
   // Fetch all containers from Docker API
   useEffect(() => {
-    fetch('http://localhost:8000/api/containers/all')
+    fetch(`${API_BASE_URL}/api/containers/all`)
       .then(res => res.json())
       .then(data => setAllContainers(data.containers || []))
       .catch(err => console.error('Failed to fetch containers:', err));
